@@ -15,6 +15,12 @@ interface FilaRol {
  */
 export async function seed(knex: Knex): Promise<void> {
   const email = process.env.ADMIN_EMAIL ?? 'admin@talentohumano.local';
+  const enProduccion = process.env.NODE_ENV === 'production';
+  if (enProduccion && !process.env.ADMIN_PASSWORD) {
+    throw new Error(
+      'ADMIN_PASSWORD es obligatorio en producción. No se usa la contraseña por defecto.',
+    );
+  }
   const password = process.env.ADMIN_PASSWORD ?? 'Admin123*';
   const nombre = process.env.ADMIN_NOMBRE ?? 'Administrador';
   const apellido = process.env.ADMIN_APELLIDO ?? 'Sistema';

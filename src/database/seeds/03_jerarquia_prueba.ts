@@ -11,6 +11,11 @@ import * as bcrypt from 'bcryptjs';
  *   (para probar más adelante la regla de "misma persona").
  */
 export async function seed(knex: Knex): Promise<void> {
+  if (process.env.NODE_ENV === 'production') {
+    console.warn('03_jerarquia_prueba omitido: no se siembran usuarios demo en producción.');
+    return;
+  }
+
   const roles = await knex('roles').select('id', 'nombre');
   const rolId = (nombre: string): number =>
     roles.find((r: { nombre: string }) => r.nombre === nombre).id;
