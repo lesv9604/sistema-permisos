@@ -10,6 +10,8 @@ import {
 import { AuthService } from "./auth.service";
 import { LoginDto } from "./dto/login.dto";
 import { LoginGoogleDto } from "./dto/login-google.dto";
+import { CambiarPasswordDto } from "./dto/cambiar-password.dto";
+import { PermitirPasswordTemporal } from "./decorators/permitir-password-temporal.decorator";
 import { Public } from "./decorators/public.decorator";
 import { UsuarioActual } from "./decorators/usuario-actual.decorator";
 import { JwtRefreshGuard } from "./guards/jwt-refresh.guard";
@@ -56,7 +58,28 @@ export class AuthController {
     return { data: resultado, message: "Tokens renovados" };
   }
 
+  /**
+   * POST /api/auth/cambiar-password — cambia la contraseña del usuario
+   * autenticado (obligatorio tras una contraseña temporal). Devuelve una
+   * sesión nueva e invalida las demás.
+   */
+  @PermitirPasswordTemporal()
+  @HttpCode(HttpStatus.OK)
+  @Post("cambiar-password")
+  async cambiarPassword(
+    @UsuarioActual("id") usuarioId: string,
+    @Body() dto: CambiarPasswordDto,
+  ) {
+    const resultado = await this.authService.cambiarPassword(
+      usuarioId,
+      dto.passwordActual,
+      dto.passwordNueva,
+    );
+    return { data: resultado, message: "Contraseña actualizada" };
+  }
+
   /** POST /api/auth/logout — invalida el refresh token del usuario. */
+  @PermitirPasswordTemporal()
   @HttpCode(HttpStatus.OK)
   @Post("logout")
   async logout(@UsuarioActual("id") usuarioId: string) {
@@ -65,6 +88,7 @@ export class AuthController {
   }
 
   /** GET /api/auth/me — perfil del usuario autenticado. */
+  @PermitirPasswordTemporal()
   @Get("me")
   async perfil(@UsuarioActual("id") usuarioId: string) {
     const usuario = await this.authService.perfil(usuarioId);

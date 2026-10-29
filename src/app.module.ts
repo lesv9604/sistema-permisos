@@ -14,6 +14,7 @@ import { NotificacionesModule } from './notificaciones/notificaciones.module';
 import { ReportesModule } from './reportes/reportes.module';
 import { JwtAuthGuard } from './auth/guards/jwt-auth.guard';
 import { RolesGuard } from './auth/guards/roles.guard';
+import { PasswordTemporalGuard } from './auth/guards/password-temporal.guard';
 
 @Module({
   imports: [
@@ -46,6 +47,10 @@ import { RolesGuard } from './auth/guards/roles.guard';
     {
       provide: APP_GUARD,
       useClass: JwtAuthGuard,
+    },
+    {
+      provide: APP_GUARD,
+      useClass: PasswordTemporalGuard,
     },
     {
       provide: APP_GUARD,

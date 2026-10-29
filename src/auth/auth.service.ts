@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Injectable,
   NotFoundException,
   UnauthorizedException,
@@ -7,7 +8,7 @@ import { ConfigService } from "@nestjs/config";
 import { JwtService, JwtSignOptions } from "@nestjs/jwt";
 import * as bcrypt from "bcryptjs";
 import { OAuth2Client } from "google-auth-library";
-import { createHash, randomUUID, timingSafeEqual } from "crypto";
+import { createHash, randomBytes, randomUUID, timingSafeEqual } from "crypto";
 import { UsuariosService } from "../usuarios/usuarios.service";
 import {
   UsuarioConRol,
@@ -104,8 +105,57 @@ export class AuthService {
       throw credencialesInvalidas;
     }
 
+    // Si tenía una contraseña temporal (enviada por correo), se invalida:
+    // quien entra con Google no la necesita y no debe quedar utilizable.
+    if (usuario.debe_cambiar_password) {
+      const inutilizable = await bcrypt.hash(randomBytes(32).toString("hex"), 10);
+      await this.usuariosService.actualizarPassword(usuario.id, inutilizable, false);
+      usuario.debe_cambiar_password = false;
+    }
+
     return this.emitirSesion(usuario);
   }
+  /**
+   * Cambia la contraseña del usuario autenticado. Verifica la actual, exige
+   * que la nueva sea distinta y no contenga la cédula ni el usuario del correo.
+   * Rota la sesión (el refresh anterior deja de servir).
+   */
+  async cambiarPassword(
+    usuarioId: string,
+    passwordActual: string,
+    passwordNueva: string,
+  ): Promise<ResultadoAuth> {
+    const usuario = await this.usuariosService.buscarPorId(usuarioId);
+    if (!usuario || !usuario.activo) {
+      throw new UnauthorizedException("Usuario no válido o inactivo.");
+    }
+    const actualOk = await bcrypt.compare(passwordActual, usuario.password_hash);
+    if (!actualOk) {
+      throw new BadRequestException("La contraseña actual no es correcta.");
+    }
+    if (passwordNueva === passwordActual) {
+      throw new BadRequestException(
+        "La nueva contraseña debe ser distinta de la actual.",
+      );
+    }
+    const nuevaMin = passwordNueva.toLowerCase();
+    const usuarioCorreo = usuario.email.split("@")[0].toLowerCase();
+    if (
+      (usuario.cedula && nuevaMin.includes(usuario.cedula.toLowerCase())) ||
+      (usuarioCorreo.length >= 4 && nuevaMin.includes(usuarioCorreo))
+    ) {
+      throw new BadRequestException(
+        "La nueva contraseña no puede contener tu cédula ni tu usuario de correo.",
+      );
+    }
+
+    const hash = await bcrypt.hash(passwordNueva, 10);
+    await this.usuariosService.actualizarPassword(usuario.id, hash, false);
+    usuario.debe_cambiar_password = false;
+    usuario.password_hash = hash;
+    return this.emitirSesion(usuario);
+  }
+
 
   /**
    * Rota los tokens: valida el refresh token contra el hash almacenado y

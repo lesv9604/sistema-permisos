@@ -29,6 +29,7 @@ export interface UsuarioPublico {
   dependencia: string | null;
   cargo: string | null;
   activo: boolean;
+  debe_cambiar_password: boolean;
 }
 
 export interface TipoPermiso {

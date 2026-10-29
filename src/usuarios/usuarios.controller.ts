@@ -45,12 +45,18 @@ export class UsuariosController {
   @Post()
   async crear(@Body() dto: CrearUsuarioDto) {
     const data = await this.usuariosService.crear(dto);
-    return { data, message: 'Usuario creado' };
+    return {
+      data,
+      message: data.correoEnviado
+        ? 'Usuario creado. Se enviaron las credenciales por correo.'
+        : 'Usuario creado. El correo NO se envió: entrega la contraseña temporal manualmente.',
+    };
   }
 
   /**
    * POST /api/usuarios/carga-masiva — crea usuarios en lote desde un CSV
-   * (campo `file`). Solo ADMIN. El password por defecto es la cédula.
+   * (campo `file`). Solo ADMIN. Cada usuario recibe una contraseña temporal
+   * aleatoria (por correo si está configurado) y debe cambiarla al ingresar.
    */
   @Post('carga-masiva')
   @UseInterceptors(FileInterceptor('file'))
@@ -61,7 +67,14 @@ export class UsuariosController {
     const data = await this.usuariosService.cargaMasiva(
       file.buffer.toString('utf-8'),
     );
-    return { data, message: `${data.creados} usuario(s) creados.` };
+    return {
+      data,
+      message:
+        `${data.creados} usuario(s) creados; ${data.correosEnviados} correo(s) enviados.` +
+        (data.sinCorreo.length
+          ? ` ${data.sinCorreo.length} sin correo: entrega sus contraseñas temporales manualmente.`
+          : ''),
+    };
   }
 
   @Patch(':id')

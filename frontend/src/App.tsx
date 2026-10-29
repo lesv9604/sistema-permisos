@@ -9,6 +9,7 @@ import { SolicitudDetallePage } from './pages/SolicitudDetallePage';
 import { TiposPermisoPage } from './pages/TiposPermisoPage';
 import { UsuariosPage } from './pages/UsuariosPage';
 import { ReportesPage } from './pages/ReportesPage';
+import { CambiarPasswordPage } from './pages/CambiarPasswordPage';
 
 export default function App() {
   return (
@@ -17,6 +18,9 @@ export default function App() {
 
       {/* Rutas que exigen sesión */}
       <Route element={<ProtectedRoute />}>
+        {/* Fuera del Layout: se usa también con contraseña temporal */}
+        <Route path="/cambiar-password" element={<CambiarPasswordPage />} />
+
         <Route element={<Layout />}>
           <Route index element={<DashboardPage />} />
           <Route path="/solicitudes" element={<SolicitudesPage />} />

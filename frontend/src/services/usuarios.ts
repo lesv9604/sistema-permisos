@@ -6,7 +6,8 @@ export interface CrearUsuarioInput {
   nombre: string;
   apellido: string;
   email: string;
-  password: string;
+  /** Opcional: vacío = el sistema genera una contraseña temporal. */
+  password?: string;
   cedula: string;
   escuela?: string;
   dependencia?: string;
@@ -38,14 +39,26 @@ export async function listarUsuarios(
   return data.data;
 }
 
+export interface CredencialTemporal {
+  email: string;
+  passwordTemporal: string;
+}
+
+export interface UsuarioCreado {
+  usuario: UsuarioPublico;
+  correoEnviado: boolean;
+  /** Solo viene si el correo NO se envió. */
+  passwordTemporal?: string;
+}
+
 export async function crearUsuario(
   input: CrearUsuarioInput,
-): Promise<UsuarioPublico> {
-  const { data } = await api.post<RespuestaApi<UsuarioPublico>>(
+): Promise<UsuarioCreado & { message: string }> {
+  const { data } = await api.post<RespuestaApi<UsuarioCreado>>(
     '/usuarios',
     input,
   );
-  return data.data;
+  return { ...data.data, message: data.message };
 }
 
 export async function actualizarUsuario(
@@ -68,12 +81,20 @@ export async function desactivarUsuario(id: string): Promise<UsuarioPublico> {
 
 export async function cargaMasivaUsuarios(
   archivo: File,
-): Promise<{ creados: number; message: string }> {
+): Promise<{
+  creados: number;
+  correosEnviados: number;
+  sinCorreo: CredencialTemporal[];
+  message: string;
+}> {
   const form = new FormData();
   form.append('file', archivo);
-  const { data } = await api.post<RespuestaApi<{ creados: number }>>(
-    '/usuarios/carga-masiva',
-    form,
-  );
-  return { creados: data.data.creados, message: data.message };
+  const { data } = await api.post<
+    RespuestaApi<{
+      creados: number;
+      correosEnviados: number;
+      sinCorreo: CredencialTemporal[];
+    }>
+  >('/usuarios/carga-masiva', form);
+  return { ...data.data, message: data.message };
 }
