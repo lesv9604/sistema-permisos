@@ -65,6 +65,12 @@ export function Layout() {
                 {usuario && ROL_TEXTO[usuario.rol]}
               </p>
             </div>
+            <NavLink
+              to="/cambiar-password"
+              className="text-xs text-slate-500 underline hover:text-slate-700"
+            >
+              Cambiar contraseña
+            </NavLink>
             <button
               onClick={cerrarSesion}
               className="rounded-md border border-slate-300 px-3 py-1.5 text-sm text-slate-600 hover:bg-slate-100"

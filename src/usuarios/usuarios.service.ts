@@ -5,14 +5,19 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { Knex } from 'knex';
 import * as bcrypt from 'bcryptjs';
 import { KNEX_CONNECTION } from '../database/database.constants';
 import { Rol } from '../common/enums/rol.enum';
 import {
   UsuarioConRol,
+  UsuarioCreado,
   UsuarioPublico,
 } from './interfaces/usuario.interface';
+import { EmailService } from '../notificaciones/email.service';
+import { generarPasswordTemporal } from '../common/utils/password';
+import { emailBienvenida } from './plantillas-email';
 import { CrearUsuarioDto } from './dto/crear-usuario.dto';
 import { ActualizarUsuarioDto } from './dto/actualizar-usuario.dto';
 import {
@@ -28,7 +33,11 @@ interface FiltrosUsuarios {
 
 @Injectable()
 export class UsuariosService {
-  constructor(@Inject(KNEX_CONNECTION) private readonly knex: Knex) {}
+  constructor(
+    @Inject(KNEX_CONNECTION) private readonly knex: Knex,
+    private readonly emailService: EmailService,
+    private readonly config: ConfigService,
+  ) {}
 
   /**
    * Selección base de un usuario con el nombre de su rol resuelto.
@@ -81,6 +90,7 @@ export class UsuariosService {
       dependencia: usuario.dependencia,
       cargo: usuario.cargo,
       activo: usuario.activo,
+      debe_cambiar_password: usuario.debe_cambiar_password ?? false,
     };
   }
 
@@ -112,7 +122,7 @@ export class UsuariosService {
     return this.aPublico(usuario);
   }
 
-  async crear(dto: CrearUsuarioDto): Promise<UsuarioPublico> {
+  async crear(dto: CrearUsuarioDto): Promise<UsuarioCreado> {
     const email = dto.email.toLowerCase().trim();
     await this.verificarEmailUnico(email);
     await this.verificarCedulaUnica(dto.cedula);
@@ -124,7 +134,8 @@ export class UsuariosService {
       await this.verificarJefeExiste(dto.jefe_escuela_id);
     }
 
-    const passwordHash = await bcrypt.hash(dto.password, 10);
+    const passwordTemporal = dto.password ?? generarPasswordTemporal();
+    const passwordHash = await bcrypt.hash(passwordTemporal, 10);
 
     const [creado] = await this.knex('usuarios')
       .insert({
@@ -140,10 +151,53 @@ export class UsuariosService {
         dependencia: dto.dependencia ?? null,
         cargo: dto.cargo ?? null,
         activo: true,
+        debe_cambiar_password: true,
       })
       .returning('id');
 
-    return this.obtenerPublico(creado.id);
+    const usuario = await this.obtenerPublico(creado.id);
+    const correoEnviado = await this.enviarCredenciales(
+      usuario.email,
+      usuario.nombre,
+      passwordTemporal,
+    );
+    return {
+      usuario,
+      correoEnviado,
+      ...(correoEnviado ? {} : { passwordTemporal }),
+    };
+  }
+
+  /**
+   * Envía el correo de bienvenida con la contraseña temporal. Devuelve `true`
+   * solo si el correo salió de verdad (no simulado). Nunca lanza.
+   */
+  private async enviarCredenciales(
+    email: string,
+    nombre: string,
+    passwordTemporal: string,
+  ): Promise<boolean> {
+    if (!this.emailService.estaHabilitado) return false;
+    const urlApp =
+      this.config.get<string>('FRONTEND_URL')?.trim() ||
+      this.config.get<string>('CORS_ORIGIN')?.split(',')[0]?.trim() ||
+      'http://localhost:5173';
+    return this.emailService.enviar(
+      emailBienvenida({ para: email, nombre, passwordTemporal, urlApp }),
+    );
+  }
+
+  /** Guarda un nuevo hash de contraseña y el estado de cambio obligatorio. */
+  async actualizarPassword(
+    id: string,
+    passwordHash: string,
+    debeCambiar: boolean,
+  ): Promise<void> {
+    await this.knex('usuarios').where({ id }).update({
+      password_hash: passwordHash,
+      debe_cambiar_password: debeCambiar,
+      updated_at: this.knex.fn.now(),
+    });
   }
 
   async actualizar(
@@ -202,6 +256,8 @@ export class UsuariosService {
     if (dto.activo !== undefined) cambios.activo = dto.activo;
     if (dto.password !== undefined) {
       cambios.password_hash = await bcrypt.hash(dto.password, 10);
+      // Contraseña asignada por un ADMIN: el usuario debe cambiarla.
+      cambios.debe_cambiar_password = true;
       // Al cambiar la contraseña, invalidamos la sesión activa.
       cambios.refresh_token_hash = null;
     }
@@ -216,14 +272,19 @@ export class UsuariosService {
    * ambos lleguen en el mismo archivo (su UUID aún no existe al parsear).
    *
    *  - Fase 1: inserta todos los usuarios con `jefe_id`/`jefe_escuela_id` en
-   *    null. El password por defecto es la cédula (hasheada).
+   *    null. Cada usuario recibe una contraseña temporal ALEATORIA y queda
+   *    con `debe_cambiar_password = true`.
    *  - Fase 2: con todos los usuarios ya en la BD, resuelve por email el UUID
    *    de cada jefe (de la BD previa o del propio CSV) y enlaza con un UPDATE.
    *
    * Si en la Fase 2 un email de jefe no existe (ni en la BD ni en el CSV), se
    * lanza una excepción → rollback de toda la transacción.
    */
-  async cargaMasiva(contenidoCsv: string): Promise<{ creados: number }> {
+  async cargaMasiva(contenidoCsv: string): Promise<{
+    creados: number;
+    correosEnviados: number;
+    sinCorreo: { email: string; passwordTemporal: string }[];
+  }> {
     const filas = parsearCsvUsuarios(contenidoCsv);
 
     const roles = (await this.knex('roles').select('id', 'nombre')) as {
@@ -246,10 +307,14 @@ export class UsuariosService {
     const preparados = prepararUsuarios(filas, ctx);
 
     const conHash = await Promise.all(
-      preparados.map(async (p) => ({
-        ...p,
-        password_hash: await bcrypt.hash(p.cedula, 10),
-      })),
+      preparados.map(async (p) => {
+        const passwordTemporal = generarPasswordTemporal();
+        return {
+          ...p,
+          passwordTemporal,
+          password_hash: await bcrypt.hash(passwordTemporal, 10),
+        };
+      }),
     );
 
     await this.knex.transaction(async (trx) => {
@@ -268,6 +333,7 @@ export class UsuariosService {
           dependencia: u.dependencia,
           cargo: u.cargo,
           activo: true,
+          debe_cambiar_password: true,
         });
       }
 
@@ -322,7 +388,20 @@ export class UsuariosService {
       }
     });
 
-    return { creados: conHash.length };
+    // Correos FUERA de la transacción: solo si todo se guardó bien.
+    let correosEnviados = 0;
+    const sinCorreo: { email: string; passwordTemporal: string }[] = [];
+    for (const u of conHash) {
+      const ok = await this.enviarCredenciales(
+        u.email,
+        u.nombre,
+        u.passwordTemporal,
+      );
+      if (ok) correosEnviados++;
+      else sinCorreo.push({ email: u.email, passwordTemporal: u.passwordTemporal });
+    }
+
+    return { creados: conHash.length, correosEnviados, sinCorreo };
   }
 
   /** Activa o desactiva un usuario (soft delete). */

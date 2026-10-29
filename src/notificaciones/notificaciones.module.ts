@@ -10,6 +10,6 @@ import { EmailService } from './email.service';
   imports: [ConfigModule, JwtModule.register({})],
   controllers: [NotificacionesController],
   providers: [NotificacionesService, NotificacionesGateway, EmailService],
-  exports: [NotificacionesService],
+  exports: [NotificacionesService, EmailService],
 })
 export class NotificacionesModule {}

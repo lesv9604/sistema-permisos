@@ -43,6 +43,11 @@ export class EmailService implements OnModuleInit {
    * negocio (la notificación in-app ya quedó persistida). Devuelve true si se
    * envió/simuló correctamente.
    */
+  /** `true` si hay proveedor configurado (los envíos no son simulados). */
+  get estaHabilitado(): boolean {
+    return this.habilitado;
+  }
+
   async enviar(email: EmailAEnviar): Promise<boolean> {
     if (!this.habilitado) {
       this.logger.log(

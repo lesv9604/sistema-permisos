@@ -20,6 +20,7 @@ import {
   listarUsuarios,
   type ActualizarUsuarioInput,
   type CrearUsuarioInput,
+  type CredencialTemporal,
 } from '../services/usuarios';
 import type { Rol, UsuarioPublico } from '../types';
 
@@ -53,6 +54,7 @@ export function UsuariosPage() {
   const qc = useQueryClient();
   const [error, setError] = useState<string | null>(null);
   const [aviso, setAviso] = useState<string | null>(null);
+  const [credenciales, setCredenciales] = useState<CredencialTemporal[]>([]);
   const [form, setForm] = useState(FORM_VACIO);
   const [editando, setEditando] = useState<UsuarioPublico | null>(null);
   const inputArchivo = useRef<HTMLInputElement>(null);
@@ -86,8 +88,14 @@ export function UsuariosPage() {
 
   const crear = useMutation({
     mutationFn: (input: CrearUsuarioInput) => crearUsuario(input),
-    onSuccess: () => {
+    onSuccess: (r) => {
       setError(null);
+      setAviso(r.message);
+      setCredenciales(
+        r.passwordTemporal
+          ? [{ email: r.usuario.email, passwordTemporal: r.passwordTemporal }]
+          : [],
+      );
       setForm(FORM_VACIO);
       invalidar();
     },
@@ -118,6 +126,7 @@ export function UsuariosPage() {
     onSuccess: (r) => {
       setError(null);
       setAviso(r.message);
+      setCredenciales(r.sinCorreo);
       invalidar();
     },
     onError: (e) => {
@@ -133,7 +142,7 @@ export function UsuariosPage() {
       nombre: form.nombre,
       apellido: form.apellido,
       email: form.email,
-      password: form.password,
+      password: form.password || undefined,
       cedula: form.cedula,
       escuela: form.escuela || undefined,
       dependencia: form.dependencia || undefined,
@@ -206,6 +215,12 @@ export function UsuariosPage() {
           {aviso}
         </p>
       )}
+      {credenciales.length > 0 && (
+        <CredencialesPendientes
+          credenciales={credenciales}
+          onCerrar={() => setCredenciales([])}
+        />
+      )}
       {error && (
         <p className="mb-4 rounded-md bg-red-50 px-3 py-2 text-sm text-red-600">
           {error}
@@ -256,11 +271,12 @@ export function UsuariosPage() {
             className="entrada"
           />
         </Campo>
-        <Campo label="Contraseña (mín. 8)">
+        <Campo label="Contraseña (opcional)">
           <input
             type="password"
-            required
             minLength={8}
+            placeholder="Vacío = la genera el sistema"
+            autoComplete="new-password"
             value={form.password}
             onChange={(e) => set('password', e.target.value)}
             className="entrada"
@@ -566,6 +582,73 @@ function EditarUsuarioModal({
           </button>
         </div>
       </form>
+    </div>
+  );
+}
+
+/**
+ * Contraseñas temporales que NO se enviaron por correo. Se muestran una sola
+ * vez para que el ADMIN las entregue por un canal seguro; no se guardan.
+ */
+function CredencialesPendientes({
+  credenciales,
+  onCerrar,
+}: {
+  credenciales: CredencialTemporal[];
+  onCerrar: () => void;
+}) {
+  const descargar = () => {
+    const filas = credenciales
+      .map((c) => `${c.email},"${c.passwordTemporal.replace(/"/g, '""')}"`)
+      .join('\n');
+    const blob = new Blob(['\ufeff' + `email,password_temporal\n${filas}`], {
+      type: 'text/csv;charset=utf-8',
+    });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'credenciales-temporales.csv';
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  };
+
+  return (
+    <div className="mb-4 rounded-md border border-amber-300 bg-amber-50 p-4 text-sm">
+      <p className="font-semibold text-amber-800">
+        Contraseñas temporales sin enviar por correo ({credenciales.length})
+      </p>
+      <p className="mt-1 text-amber-700">
+        Se muestran solo esta vez. Entrégalas por un canal seguro; el usuario
+        deberá cambiarla al ingresar. Si descargas el CSV, bórralo después.
+      </p>
+      <div className="mt-3 max-h-60 overflow-auto">
+        <table className="w-full text-left">
+          <tbody>
+            {credenciales.map((c) => (
+              <tr key={c.email} className="border-t border-amber-200">
+                <td className="py-1 pr-4">{c.email}</td>
+                <td className="py-1 font-mono">{c.passwordTemporal}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <div className="mt-3 flex gap-2">
+        <button
+          onClick={descargar}
+          className="rounded-md border border-amber-400 px-3 py-1.5 hover:bg-amber-100"
+        >
+          ⬇ Descargar CSV
+        </button>
+        <button
+          onClick={onCerrar}
+          className="rounded-md px-3 py-1.5 text-amber-800 hover:bg-amber-100"
+        >
+          Ocultar
+        </button>
+      </div>
     </div>
   );
 }

@@ -27,10 +27,12 @@ export class CrearUsuarioDto {
   @MaxLength(150)
   email!: string;
 
+  /** Opcional: si no se envía, el sistema genera una contraseña temporal. */
+  @IsOptional()
   @IsString()
   @MinLength(8, { message: 'La contraseña debe tener al menos 8 caracteres.' })
   @MaxLength(100)
-  password!: string;
+  password?: string;
 
   @IsString()
   @MinLength(3)
