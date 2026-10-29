@@ -5,6 +5,7 @@ export interface AuthContextValue {
   usuario: UsuarioPublico | null;
   cargando: boolean;
   login: (email: string, password: string) => Promise<void>;
+  loginGoogle: (idToken: string) => Promise<void>;
   logout: () => Promise<void>;
   tieneRol: (...roles: Rol[]) => boolean;
 }
