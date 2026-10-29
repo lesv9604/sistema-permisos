@@ -14,7 +14,9 @@ export const api = axios.create({ baseURL: API_URL });
 api.interceptors.request.use((config: InternalAxiosRequestConfig) => {
   const url = config.url ?? '';
   const esAuthPublico =
-    url.includes('/auth/login') || url.includes('/auth/refresh');
+    url.includes('/auth/login') ||
+    url.includes('/auth/google') ||
+    url.includes('/auth/refresh');
   const access = tokens.getAccess();
   if (access && !esAuthPublico) {
     const headers = AxiosHeaders.from(config.headers);
@@ -52,7 +54,8 @@ api.interceptors.response.use(
       | undefined;
     const url = original?.url ?? '';
     const esRefresh = url.includes('/auth/refresh');
-    const esLogin = url.includes('/auth/login');
+    const esLogin =
+      url.includes('/auth/login') || url.includes('/auth/google');
 
     if (
       error.response?.status === 401 &&

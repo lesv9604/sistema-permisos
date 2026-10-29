@@ -1,10 +1,14 @@
 import { useState, type FormEvent } from 'react';
 import { Navigate, useNavigate } from 'react-router-dom';
 import { useAuth } from '../auth/auth-context';
+import { GoogleLogin } from '@react-oauth/google';
 import { mensajeError } from '../lib/api';
 
+const GOOGLE_HABILITADO = !!import.meta.env.VITE_GOOGLE_CLIENT_ID?.trim();
+const GOOGLE_DOMINIO = import.meta.env.VITE_GOOGLE_HOSTED_DOMAIN?.trim();
+
 export function LoginPage() {
-  const { usuario, login, cargando } = useAuth();
+  const { usuario, login, loginGoogle, cargando } = useAuth();
   const navigate = useNavigate();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -29,6 +33,23 @@ export function LoginPage() {
     }
   };
 
+  const onGoogle = async (credential?: string) => {
+    if (!credential) {
+      setError('No se recibió la credencial de Google.');
+      return;
+    }
+    setError(null);
+    setEnviando(true);
+    try {
+      await loginGoogle(credential);
+      navigate('/', { replace: true });
+    } catch (err) {
+      setError(mensajeError(err));
+    } finally {
+      setEnviando(false);
+    }
+  };
+
   return (
     <div className="flex min-h-full items-center justify-center px-4">
       <div className="w-full max-w-sm rounded-xl border border-slate-200 bg-white p-8 shadow-sm">
@@ -38,6 +59,26 @@ export function LoginPage() {
         <p className="mt-1 text-center text-sm text-slate-500">
           Gestión de permisos laborales
         </p>
+
+        {GOOGLE_HABILITADO && (
+          <div className="mt-6 space-y-4">
+            <div className="flex justify-center">
+              <GoogleLogin
+                onSuccess={(r) => void onGoogle(r.credential)}
+                onError={() =>
+                  setError('No se pudo iniciar sesión con Google.')
+                }
+                hosted_domain={GOOGLE_DOMINIO || undefined}
+                text="signin_with"
+              />
+            </div>
+            <div className="flex items-center gap-3 text-xs text-slate-400">
+              <span className="h-px flex-1 bg-slate-200" />
+              o con correo y contraseña
+              <span className="h-px flex-1 bg-slate-200" />
+            </div>
+          </div>
+        )}
 
         <form onSubmit={onSubmit} className="mt-6 space-y-4">
           <div>

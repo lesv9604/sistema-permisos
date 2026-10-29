@@ -53,15 +53,33 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return () => window.removeEventListener(EVENTO_SESION_EXPIRADA, handler);
   }, [cerrarLocal]);
 
-  const login = useCallback(async (email: string, password: string) => {
-    const { data } = await api.post<RespuestaApi<SesionData>>('/auth/login', {
-      email,
-      password,
-    });
-    tokens.set(data.data.access_token, data.data.refresh_token);
-    setUsuario(data.data.usuario);
-    conectarSocket(data.data.access_token);
+  const iniciarSesion = useCallback((sesion: SesionData) => {
+    tokens.set(sesion.access_token, sesion.refresh_token);
+    setUsuario(sesion.usuario);
+    conectarSocket(sesion.access_token);
   }, []);
+
+  const login = useCallback(
+    async (email: string, password: string) => {
+      const { data } = await api.post<RespuestaApi<SesionData>>('/auth/login', {
+        email,
+        password,
+      });
+      iniciarSesion(data.data);
+    },
+    [iniciarSesion],
+  );
+
+  const loginGoogle = useCallback(
+    async (idToken: string) => {
+      const { data } = await api.post<RespuestaApi<SesionData>>(
+        '/auth/google',
+        { idToken },
+      );
+      iniciarSesion(data.data);
+    },
+    [iniciarSesion],
+  );
 
   const logout = useCallback(async () => {
     try {
@@ -81,6 +99,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     usuario,
     cargando,
     login,
+    loginGoogle,
     logout,
     tieneRol,
   };
