@@ -2,6 +2,9 @@ import * as bcrypt from 'bcryptjs';
 import { Knex } from 'knex';
 import { UsuariosService } from './usuarios.service';
 
+const emailMock = { estaHabilitado: false, enviar: jest.fn() };
+const configMock = { get: () => undefined };
+
 interface FilaDb {
   id: string;
   email: string;
@@ -112,11 +115,11 @@ describe('UsuariosService.cargaMasiva (dos fases)', () => {
       'Ignacio,Jefe,ignacio@x.com,C-I,Ciencias,,Jefe Inmediato,JEFE_INMEDIATO,,\n' +
       'Esteban,Escuela,esteban@x.com,C-E,Ciencias,,Jefe de Escuela,JEFE_ESCUELA,,';
     const { knex, inserts, db } = mockKnex({ roles: ROLES });
-    const svc = new UsuariosService(knex);
+    const svc = new UsuariosService(knex, emailMock as never, configMock as never);
 
     const res = await svc.cargaMasiva(csv);
 
-    expect(res).toEqual({ creados: 3 });
+    expect(res).toMatchObject({ creados: 3, correosEnviados: 0 });
     // Fase 1: todos insertados con jefes en null.
     expect(inserts).toHaveLength(3);
     expect(inserts.every((i) => i.jefe_id === null && i.jefe_escuela_id === null)).toBe(true);
@@ -134,21 +137,28 @@ describe('UsuariosService.cargaMasiva (dos fases)', () => {
       roles: ROLES,
       existentes: [{ id: 'uuid-viejo', email: 'viejo.jefe@x.com', cedula: 'C-V' }],
     });
-    const svc = new UsuariosService(knex);
+    const svc = new UsuariosService(knex, emailMock as never, configMock as never);
 
     await svc.cargaMasiva(csv);
     expect(db.get('diana@x.com')!.jefe_id).toBe('uuid-viejo');
   });
 
-  it('usa la cédula como password (hasheada)', async () => {
+  it('asigna una contraseña temporal aleatoria (no la cédula) y exige cambio', async () => {
     const csv =
       `${CABECERAS}\n` +
       'Ana,Pérez,ana@x.com,C1,Ciencias,,Docente,DOCENTE,,';
     const { knex, inserts } = mockKnex({ roles: ROLES });
-    const svc = new UsuariosService(knex);
+    const svc = new UsuariosService(knex, emailMock as never, configMock as never);
 
-    await svc.cargaMasiva(csv);
-    expect(bcrypt.compareSync('C1', inserts[0].password_hash)).toBe(true);
+    const r = await svc.cargaMasiva(csv);
+    expect(bcrypt.compareSync('C1', inserts[0].password_hash)).toBe(false);
+    expect(inserts[0].debe_cambiar_password).toBe(true);
+    // Sin proveedor de correo: se devuelve la contraseña para entrega manual.
+    expect(r.correosEnviados).toBe(0);
+    expect(r.sinCorreo).toHaveLength(1);
+    expect(
+      bcrypt.compareSync(r.sinCorreo[0].passwordTemporal, inserts[0].password_hash),
+    ).toBe(true);
   });
 
   it('lanza (rollback) si un email de jefe no existe ni en la BD ni en el CSV', async () => {
@@ -156,7 +166,7 @@ describe('UsuariosService.cargaMasiva (dos fases)', () => {
       `${CABECERAS}\n` +
       'Diana,Doc,diana@x.com,C-D,Ciencias,,Docente,DOCENTE,fantasma@x.com,';
     const { knex } = mockKnex({ roles: ROLES });
-    const svc = new UsuariosService(knex);
+    const svc = new UsuariosService(knex, emailMock as never, configMock as never);
 
     await expect(svc.cargaMasiva(csv)).rejects.toThrow(/fantasma@x.com/i);
   });
@@ -166,7 +176,7 @@ describe('UsuariosService.cargaMasiva (dos fases)', () => {
       `${CABECERAS}\n` +
       'Ana,Pérez,ana@x.com,C1,Ciencias,,Docente,NO_EXISTE,,';
     const { knex, inserts } = mockKnex({ roles: ROLES });
-    const svc = new UsuariosService(knex);
+    const svc = new UsuariosService(knex, emailMock as never, configMock as never);
 
     await expect(svc.cargaMasiva(csv)).rejects.toThrow(/Fila 2:.*NO_EXISTE/i);
     expect(inserts).toHaveLength(0);
@@ -178,7 +188,7 @@ describe('UsuariosService.cargaMasiva (dos fases)', () => {
       'Ana,Pérez,dup@x.com,C1,Ciencias,,Docente,DOCENTE,,\n' +
       'Otra,Persona,dup@x.com,C2,Ciencias,,Docente,DOCENTE,,';
     const { knex, inserts } = mockKnex({ roles: ROLES });
-    const svc = new UsuariosService(knex);
+    const svc = new UsuariosService(knex, emailMock as never, configMock as never);
 
     await expect(svc.cargaMasiva(csv)).rejects.toThrow(/ya existe/i);
     expect(inserts).toHaveLength(0);

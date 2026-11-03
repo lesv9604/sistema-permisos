@@ -20,6 +20,8 @@ export interface UsuarioAutenticado {
   id: string;
   email: string;
   rol: Rol;
+  /** `true` si tiene contraseña temporal pendiente de cambio. */
+  debeCambiarPassword?: boolean;
 }
 
 /**

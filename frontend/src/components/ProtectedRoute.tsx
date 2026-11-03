@@ -1,4 +1,4 @@
-import { Navigate, Outlet } from 'react-router-dom';
+import { Navigate, Outlet, useLocation } from 'react-router-dom';
 import { useAuth } from '../auth/auth-context';
 import type { Rol } from '../types';
 
@@ -8,6 +8,7 @@ import type { Rol } from '../types';
  */
 export function ProtectedRoute({ roles }: { roles?: Rol[] }) {
   const { usuario, cargando } = useAuth();
+  const location = useLocation();
 
   if (cargando) {
     return (
@@ -19,6 +20,14 @@ export function ProtectedRoute({ roles }: { roles?: Rol[] }) {
 
   if (!usuario) {
     return <Navigate to="/login" replace />;
+  }
+
+  // Contraseña temporal: obligatorio cambiarla antes de usar el sistema.
+  if (
+    usuario.debe_cambiar_password &&
+    location.pathname !== '/cambiar-password'
+  ) {
+    return <Navigate to="/cambiar-password" replace />;
   }
 
   if (roles && roles.length > 0 && !roles.includes(usuario.rol)) {

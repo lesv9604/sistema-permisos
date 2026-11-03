@@ -17,6 +17,7 @@ export interface UsuarioFila {
   dependencia: string | null;
   cargo: string | null;
   activo: boolean;
+  debe_cambiar_password: boolean;
   refresh_token_hash: string | null;
   created_at: Date;
   updated_at: Date;
@@ -47,4 +48,13 @@ export interface UsuarioPublico {
   dependencia: string | null;
   cargo: string | null;
   activo: boolean;
+  debe_cambiar_password: boolean;
+}
+
+/** Resultado de crear un usuario: credenciales temporales y estado del correo. */
+export interface UsuarioCreado {
+  usuario: UsuarioPublico;
+  correoEnviado: boolean;
+  /** Solo se devuelve si el correo NO se envió, para entregarla manualmente. */
+  passwordTemporal?: string;
 }

@@ -81,6 +81,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     [iniciarSesion],
   );
 
+  const cambiarPassword = useCallback(
+    async (passwordActual: string, passwordNueva: string) => {
+      const { data } = await api.post<RespuestaApi<SesionData>>(
+        '/auth/cambiar-password',
+        { passwordActual, passwordNueva },
+      );
+      iniciarSesion(data.data);
+    },
+    [iniciarSesion],
+  );
+
   const logout = useCallback(async () => {
     try {
       await api.post('/auth/logout');
@@ -100,6 +111,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     cargando,
     login,
     loginGoogle,
+    cambiarPassword,
     logout,
     tieneRol,
   };

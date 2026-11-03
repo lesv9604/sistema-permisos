@@ -27,6 +27,11 @@ export class JwtStrategy extends PassportStrategy(Strategy, 'jwt') {
     if (!usuario || !usuario.activo) {
       throw new UnauthorizedException('Usuario no válido o inactivo.');
     }
-    return { id: usuario.id, email: usuario.email, rol: usuario.rol };
+    return {
+      id: usuario.id,
+      email: usuario.email,
+      rol: usuario.rol,
+      debeCambiarPassword: usuario.debe_cambiar_password === true,
+    };
   }
 }
