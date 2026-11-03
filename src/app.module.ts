@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { APP_GUARD } from '@nestjs/core';
+import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 import { ServeStaticModule } from '@nestjs/serve-static';
 import { join } from 'path';
 import { AppController } from './app.controller';
@@ -21,6 +22,13 @@ import { PasswordTemporalGuard } from './auth/guards/password-temporal.guard';
     // Carga las variables de entorno desde `.env` de forma global.
     ConfigModule.forRoot({
       isGlobal: true,
+    }),
+
+    // Límite global de peticiones por IP (anti abuso). Los endpoints de
+    // autenticación tienen límites más estrictos con @Throttle().
+    ThrottlerModule.forRoot({
+      throttlers: [{ ttl: 60_000, limit: 120 }],
+      errorMessage: 'Demasiados intentos. Espera un minuto e inténtalo de nuevo.',
     }),
 
     // Sirve el frontend compilado (frontend/dist) desde el propio backend, de
@@ -44,6 +52,11 @@ import { PasswordTemporalGuard } from './auth/guards/password-temporal.guard';
     AppService,
     // Orden importante: primero autentica (JwtAuthGuard), luego autoriza por
     // rol (RolesGuard). Aplican a TODA la API salvo endpoints @Public().
+    // El rate limiting va primero: corta el abuso antes de tocar la BD.
+    {
+      provide: APP_GUARD,
+      useClass: ThrottlerGuard,
+    },
     {
       provide: APP_GUARD,
       useClass: JwtAuthGuard,

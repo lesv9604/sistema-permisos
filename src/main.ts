@@ -6,6 +6,10 @@ import { HttpExceptionFilter } from './common/filters/http-exception.filter';
 async function bootstrap(): Promise<void> {
   const app = await NestFactory.create(AppModule);
 
+  // Detrás del proxy de Render/Vercel: usar la IP real del cliente
+  // (X-Forwarded-For) para el rate limiting.
+  app.getHttpAdapter().getInstance().set('trust proxy', 1);
+
   // CORS: el frontend se sirve como sitio separado (otro origen).
   // En dev permitimos cualquier origen; en producción, definir CORS_ORIGIN.
   const corsOrigin = process.env.CORS_ORIGIN?.trim();

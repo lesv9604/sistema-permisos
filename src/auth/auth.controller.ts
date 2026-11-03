@@ -7,6 +7,7 @@ import {
   Post,
   UseGuards,
 } from "@nestjs/common";
+import { Throttle } from "@nestjs/throttler";
 import { AuthService } from "./auth.service";
 import { LoginDto } from "./dto/login.dto";
 import { LoginGoogleDto } from "./dto/login-google.dto";
@@ -23,6 +24,7 @@ export class AuthController {
 
   /** POST /api/auth/login — autenticación con email + contraseña. */
   @Public()
+  @Throttle({ default: { ttl: 60_000, limit: 5 } })
   @HttpCode(HttpStatus.OK)
   @Post("login")
   async login(@Body() dto: LoginDto) {
@@ -35,6 +37,7 @@ export class AuthController {
    * Recibe el ID token de Google Identity Services.
    */
   @Public()
+  @Throttle({ default: { ttl: 60_000, limit: 10 } })
   @HttpCode(HttpStatus.OK)
   @Post("google")
   async loginGoogle(@Body() dto: LoginGoogleDto) {
@@ -64,6 +67,7 @@ export class AuthController {
    * sesión nueva e invalida las demás.
    */
   @PermitirPasswordTemporal()
+  @Throttle({ default: { ttl: 60_000, limit: 5 } })
   @HttpCode(HttpStatus.OK)
   @Post("cambiar-password")
   async cambiarPassword(
